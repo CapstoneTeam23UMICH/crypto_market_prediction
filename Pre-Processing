@@ -1,0 +1,129 @@
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import StandardScaler, RobustScaler
+from sklearn.decomposition import PCA
+import pickle
+import os
+import gc
+
+# --- Step 1: Load and Validate Data ---
+train_path = '/kaggle/input/testtrain/train.parquet'
+test_path = '/kaggle/input/testtrain/test.parquet'
+output_dir = '/kaggle/working/'
+train_output_path = os.path.join(output_dir, 'train_processed.parquet')
+test_output_path = os.path.join(output_dir, 'test_processed.parquet')
+pca_output_path = os.path.join(output_dir, 'pca.pkl')
+scaler_output_path = os.path.join(output_dir, 'scaler.pkl')
+
+for path in [train_path, test_path]:
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"File not found at {path}.")
+
+try:
+    train_data = pd.read_parquet(train_path).astype('float32')
+    test_data = pd.read_parquet(test_path).astype('float32')
+    print("Train dataset columns:", train_data.columns.tolist())
+    print("Test dataset columns:", test_data.columns.tolist())
+except Exception as e:
+    raise Exception(f"Failed to load data: {e}")
+
+required_columns = ['label', 'volume', 'buy_qty', 'sell_qty'] + [f'X{i}' for i in range(1, 891)]
+missing_columns = [col for col in required_columns if col not in train_data.columns]
+if missing_columns:
+    print(f"Warning: Missing columns in train data: {missing_columns}.")
+
+# --- Step 2: Drop Highly Correlated Features ---
+drop_features = [
+    "X104", "X110", "X116", "X122", "X128", "X134", "X140", "X146", "X152", "X158",
+    "X164", "X170", "X176", "X182", "X309", "X315", "X321", "X327", "X333", "X339",
+    "X345", "X351", "X357", "X363", "X369", "X375", "X381", "X387",
+    "X697", "X698", "X699", "X700", "X701", "X702", "X703", "X704", "X705", "X706",
+    "X707", "X708", "X709", "X710", "X711", "X712", "X713", "X714", "X715", "X716",
+    "X717", "X864", "X867", "X869", "X870", "X871", "X872"
+]
+train_data = train_data.drop(columns=[col for col in drop_features if col in train_data.columns])
+test_data = test_data.drop(columns=[col for col in drop_features if col in test_data.columns])
+print(f"Dropped {len(drop_features)} highly correlated features.")
+
+# --- Step 3: Preprocessing and Feature Engineering ---
+def preprocess_and_create_features(data, is_train=True, pca_model=None, scaler=None, chunk_size=100000):
+    result_data = data[['label']].copy() if is_train else pd.DataFrame(index=data.index)
+    data = data.replace([np.inf, -np.inf], 0).fillna(0)
+
+    # Remove low-variance features
+    known_features = ['volume', 'buy_qty', 'sell_qty']
+    anonymized_features = [f'X{i}' for i in range(1, 891) if f'X{i}' in data.columns]
+    variances = data[anonymized_features].var()
+    high_variance_features = variances[variances > 1e-5].index.tolist()
+    anonymized_features = [f for f in anonymized_features if f in high_variance_features]
+    print(f"Retained {len(anonymized_features)} high-variance anonymized features.")
+
+    # Known feature transformations
+    for col in known_features:
+        if col in data.columns:
+            p1, p99 = data[col].quantile([0.01, 0.99])
+            data[col] = data[col].clip(p1, p99)
+            result_data[f'log_{col}'] = np.log1p(data[col].clip(lower=0)).astype('float32')
+            result_data[f'{col}_sq'] = (data[col] ** 2).astype('float32')
+            result_data[f'{col}_cube'] = (data[col] ** 3).astype('float32')
+            result_data[f'{col}_sin'] = np.sin(data[col]).astype('float32')
+            result_data[f'{col}_exp'] = np.exp(data[col].clip(upper=10)).astype('float32')
+            # Add rolling mean and volatility
+            result_data[f'{col}_roll_mean'] = data[col].rolling(window=5, min_periods=1).mean().astype('float32')
+            result_data[f'{col}_roll_std'] = data[col].rolling(window=5, min_periods=1).std().astype('float32')
+
+    # Interaction features
+    result_data['buy_sell_ratio'] = (data['buy_qty'] / (data['sell_qty'] + 1e-6)).astype('float32')
+    result_data['net_flow'] = (data['buy_qty'] - data['sell_qty']).astype('float32')
+    result_data['order_imbalance'] = ((data['buy_qty'] - data['sell_qty']) / 
+                                     (data['buy_qty'] + data['sell_qty'] + 1e-6)).astype('float32')
+    result_data['volume_imbalance'] = (data['volume'] * result_data['order_imbalance']).astype('float32')
+
+    # Lag features for high-autocorrelation features
+    high_autocorr_features = ['X680']  # From EDA
+    for col in high_autocorr_features:
+        if col in data.columns:
+            for lag in [1, 2, 3]:
+                result_data[f'{col}_lag_{lag}'] = data[col].shift(lag).fillna(0).astype('float32')
+
+    # PCA on anonymized features
+    scaler_out = scaler if not is_train else RobustScaler()
+    pca_out = pca_model if not is_train else PCA(n_components=20, random_state=42)
+    if anonymized_features:
+        n_rows = len(data)
+        pca_features = None
+        for start in range(0, n_rows, chunk_size):
+            end = min(start + chunk_size, n_rows)
+            chunk = data[anonymized_features].iloc[start:end].values.astype('float32')
+            X_scaled = scaler_out.fit_transform(chunk) if is_train and start == 0 else scaler_out.transform(chunk)
+            pca_features_chunk = pca_out.fit_transform(X_scaled) if is_train and start == 0 else pca_out.transform(X_scaled)
+            pca_features = np.vstack([pca_features, pca_features_chunk]) if pca_features is not None else pca_features_chunk
+            gc.collect()
+        for i in range(pca_features.shape[1]):
+            result_data[f'pca_{i}'] = pca_features[:, i].astype('float32')
+    else:
+        print("No anonymized features for PCA.")
+        pca_out = None
+        scaler_out = None
+
+    return result_data, scaler_out, pca_out
+
+# Apply preprocessing
+train_data, scaler, pca_model = preprocess_and_create_features(train_data, is_train=True)
+test_data, scaler, pca_model = preprocess_and_create_features(test_data, is_train=False, pca_model=pca_model, scaler=scaler)
+
+# Save processed data and models
+try:
+    train_data.to_parquet(train_output_path, index=True)
+    test_data.to_parquet(test_output_path, index=True)
+    with open(pca_output_path, 'wb') as f:
+        pickle.dump(pca_model, f)
+    with open(scaler_output_path, 'wb') as f:
+        pickle.dump(scaler, f)
+    print(f"Saved processed data and models to {output_dir}")
+except Exception as e:
+    raise Exception(f"Failed to save processed data or models: {e}")
+
+# Clear memory
+del train_data, test_data, scaler, pca_model
+gc.collect()
