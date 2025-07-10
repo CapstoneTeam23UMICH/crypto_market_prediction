@@ -161,3 +161,33 @@ def get_autocorrelation_train_df(df='default', feature_list='default',
         github_token=github_token,
         refresh_repo_file=refresh_repo_file
     )
+
+
+def get_constant_feature_df(df_train='default', df_test='default', feature_list='default',
+                             github_token='default', refresh_repo_file=False):
+    """
+    Computes and pushes autocorrelation dataframe for training data.
+    """
+    def compute_constant_feature_df():
+        vc_train = {}
+        for col in feature_list:
+            vc_train[col] = len(df_train[col].value_counts())
+
+        vc_test = {}
+        for col in feature_list:
+            vc_test[col] = len(df_test[col].value_counts())
+
+        constant_df = pd.DataFrame({
+            'feature': list(vc_train.keys()),
+            'constant_in_train': [v == 1 for v in vc_train.values()],
+            'constant_in_test': [vc_test[k] == 1 for k in vc_train.keys()]
+        })
+        return constant_df
+
+    return maybe_refresh_and_push(
+        df_compute_fn=get_constant_feature_df,
+        filename="df_constant_features.parquet",
+        commit_msg="Add constant features dataframe",
+        github_token=github_token,
+        refresh_repo_file=refresh_repo_file
+    )
