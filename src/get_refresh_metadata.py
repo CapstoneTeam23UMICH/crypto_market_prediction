@@ -82,7 +82,6 @@ def get_feature_drift_df(df_train='default', df_test='default', feature_list='de
         refresh_repo_file=refresh_repo_file
     )
 
-
 def get_correlation_train_df(df_train='default', feature_list='default',
                             github_token='default', refresh_repo_file=False):
     """
