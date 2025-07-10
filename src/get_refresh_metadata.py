@@ -82,13 +82,12 @@ def get_feature_drift_df(df_train='default', df_test='default', feature_list='de
         refresh_repo_file=refresh_repo_file
     )
 
-
-def get_covariance_train_df(df_train='default', feature_list='default',
+def get_correlation_train_df(df_train='default', feature_list='default',
                             github_token='default', refresh_repo_file=False):
     """
-    Computes and pushes covariance matrix for training data.
+    Computes and pushes correlation matrix for training data.
     """
-    def compute_cov_df():
+    def compute_corr_df():
         corr = df_train[feature_list].corr(method='pearson')
         corr_long = corr.stack().reset_index()
         corr_long.columns = ['x', 'y', 'corr']
@@ -101,20 +100,20 @@ def get_covariance_train_df(df_train='default', feature_list='default',
         return corr_long.drop(columns=['x_min', 'x_max'])
 
     return maybe_refresh_and_push(
-        df_compute_fn=compute_cov_df,
+        df_compute_fn=compute_corr_df,
         filename="corr_long_train.parquet",
-        commit_msg="Add covariance matrix dataframe",
+        commit_msg="Add correlation matrix dataframe",
         github_token=github_token,
         refresh_repo_file=refresh_repo_file
     )
 
 
-def get_covariance_test_df(df_test='default', feature_list='default',
+def get_correlation_test_df(df_test='default', feature_list='default',
                            github_token='default', refresh_repo_file=False):
     """
-    Computes and pushes covariance matrix for test data.
+    Computes and pushes correlation matrix for test data.
     """
-    def compute_cov_df():
+    def compute_corr_df():
         corr = df_test[feature_list].corr(method='pearson')
         corr_long = corr.stack().reset_index()
         corr_long.columns = ['x', 'y', 'corr']
@@ -127,9 +126,9 @@ def get_covariance_test_df(df_test='default', feature_list='default',
         return corr_long.drop(columns=['x_min', 'x_max'])
 
     return maybe_refresh_and_push(
-        df_compute_fn=compute_cov_df,
+        df_compute_fn=compute_corr_df,
         filename="corr_long_test.parquet",
-        commit_msg="Add covariance matrix dataframe for test set",
+        commit_msg="Add correlation matrix dataframe for test set",
         github_token=github_token,
         refresh_repo_file=refresh_repo_file
     )
