@@ -10,6 +10,10 @@ import pandas as pd
 from scipy.stats import ks_2samp
 from statsmodels.tsa.stattools import acf
 from tqdm import tqdm
+import lightgbm as lgb
+from sklearn.metrics import roc_auc_score
+from sklearn.model_selection import train_test_split
+import shap
 
 
 def maybe_refresh_and_push(
@@ -166,7 +170,7 @@ def get_autocorrelation_train_df(df='default', feature_list='default',
 def get_constant_feature_df(df_train='default', df_test='default', feature_list='default',
                              github_token='default', refresh_repo_file=False):
     """
-    Computes and pushes autocorrelation dataframe for training data.
+    Computes and pushes constant feature dataframe for training data.
     """
     def compute_constant_feature_df():
         vc_train = {}
@@ -185,9 +189,81 @@ def get_constant_feature_df(df_train='default', df_test='default', feature_list=
         return constant_df
 
     return maybe_refresh_and_push(
-        df_compute_fn=get_constant_feature_df,
+        df_compute_fn=compute_constant_feature_df,
         filename="df_constant_features.parquet",
         commit_msg="Add constant features dataframe",
+        github_token=github_token,
+        refresh_repo_file=refresh_repo_file
+    )
+
+def get_adversarial_validation_df(df_train='default', df_test='default', feature_list='default',
+                                 max_iter=8, random_state = 42, threshold = 0.75, github_token='default', 
+                                 refresh_repo_file=False):
+    """
+    Computes and pushes adversarial validation dataframe.
+    """
+    def compute_adversarial_validation_df():
+        features = feature_list
+        n = 1
+        dict_result = {}
+
+        while True:
+            adv_train = df_train[features].copy().astype('float32').fillna(0)
+            adv_test = df_test[features].copy().astype('float32').fillna(0)
+            adv_train['is_test'] = 0
+            adv_test['is_test'] = 1
+
+            adv_data = pd.concat([adv_train, adv_test])
+            X_adv = adv_data[features]
+            y_adv = adv_data['is_test']
+
+            X_train_adv, X_test_adv, y_train_adv, y_test_adv = train_test_split(
+                X_adv, y_adv, test_size=0.3, stratify=y_adv, random_state=random_state
+            )
+
+            clf = lgb.LGBMClassifier(
+                n_estimators=100,
+                max_depth=5,
+                learning_rate=0.05,
+                random_state=random_state
+            )
+            clf.fit(X_train_adv, y_train_adv)
+            auc = roc_auc_score(y_test_adv, clf.predict_proba(X_test_adv)[:, 1])
+
+            print(f"[Iter {n}] Adversarial validation AUC: {auc:.4f}")
+
+            explainer = shap.TreeExplainer(clf)
+            X_sample = X_adv.sample(n=100000, random_state=random_state)
+            shap_values = explainer.shap_values(X_sample)[1]
+            shap_importance = pd.DataFrame(shap_values, columns=X_sample.columns).abs().mean().sort_values(ascending=False)
+
+            model_importance = pd.Series(clf.feature_importances_, index=features).sort_values(ascending=False)
+            df_importance = pd.concat([model_importance, shap_importance], axis=1)
+            df_importance.columns = ['model_importance', 'shap_importance']
+
+            stable_features = shap_importance[shap_importance < shap_importance.quantile(threshold)].index.tolist()
+            drop_features = [feature for feature in features if feature not in stable_features]
+
+            iter_output = {
+                'auc_score': auc,
+                'feature_importance': df_importance.to_dict(orient='dict'),
+                'drop_features': drop_features
+            }
+
+            dict_result[f'iter_{n}'] = iter_output
+
+            if len(stable_features) == 0 or auc <= 0.5 or n >= max_iter:
+                break
+
+            features = stable_features
+            n += 1
+
+        return pd.DataFrame(dict_result).T
+
+    return maybe_refresh_and_push(
+        df_compute_fn=compute_adversarial_validation_df,
+        filename="df_adversarial_validation.parquet",
+        commit_msg="Add adversarial validation dataframe",
         github_token=github_token,
         refresh_repo_file=refresh_repo_file
     )
