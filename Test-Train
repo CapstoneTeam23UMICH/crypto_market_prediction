@@ -1,178 +1,15 @@
 import pandas as pd
 import numpy as np
 import lightgbm as lgb
-from sklearn.linear_model import Ridge
 from sklearn.feature_selection import VarianceThreshold
 from scipy.stats import pearsonr
 from sklearn.model_selection import KFold
-import torch
-import torch.nn as nn
-import torch.optim as optim
+from sklearn.linear_model import Ridge
 import pickle
 import os
 import gc
 
-# --- Step 1: Load Processed Data and Models ---
-train_path = '/kaggle/working/train_processed.parquet'
-test_path = '/kaggle/working/test_processed.parquet'
-pca_path = '/kaggle/working/pca.pkl'
-scaler_path = '/kaggle/working/scaler.pkl'
-submission_path = '/kaggle/working/submission.csv'
-
-for path in [train_path, test_path, pca_path, scaler_path]:
-    if not os.path.exists(path):
-        raise FileNotFoundError(f"File not found at {path}.")
-
-try:
-    train_data = pd.read_parquet(train_path).astype('float32')
-    test_data = pd.read_parquet(test_path).astype('float32')
-    with open(pca_path, 'rb') as f:
-        pca_model = pickle.load(f)
-    with open(scaler_path, 'rb') as f:
-        scaler = pickle.load(f)
-    print("Loaded processed train and test data, PCA, and scaler.")
-except Exception as e:
-    raise Exception(f"Failed to load processed data or models: {e}")
-
-# Define feature set (excluding dropped features)
-features = ['log_volume', 'volume_sq', 'volume_cube', 'volume_sin', 'volume_exp', 'volume_roll_mean', 'volume_roll_std',
-            'log_buy_qty', 'buy_qty_sq', 'buy_qty_cube', 'buy_qty_sin', 'buy_qty_exp', 'buy_qty_roll_mean', 'buy_qty_roll_std',
-            'log_sell_qty', 'sell_qty_sq', 'sell_qty_cube', 'sell_qty_sin', 'sell_qty_exp', 'sell_qty_roll_mean', 'sell_qty_roll_std',
-            'buy_sell_ratio', 'net_flow', 'order_imbalance', 'volume_imbalance', 'X680_lag_1', 'X680_lag_2', 'X680_lag_3'] + \
-           [f'pca_{i}' for i in range(20)]
-
-# --- Step 2: Feature Selection with Variance Threshold and Adversarial Validation ---
-def select_top_features(X, y, top_n=50):
-    # Remove low-variance features
-    selector = VarianceThreshold(threshold=1e-5)
-    X_selected = selector.fit_transform(X)
-    selected_features = X.columns[selector.get_support()].tolist()
-    
-    try:
-        train_data_lgb = lgb.Dataset(X_selected, label=y)
-        params = {
-            'objective': 'regression', 'metric': 'mse', 'num_leaves': 31, 'learning_rate': 0.05,
-            'feature_fraction': 0.8, 'bagging_fraction': 0.8, 'bagging_freq': 5, 'verbose': -1
-        }
-        model = lgb.train(params, train_data_lgb, num_boost_round=100)
-        importance = pd.Series(model.feature_importance(importance_type='gain'), index=selected_features)
-        top_features = importance.nlargest(min(top_n, len(selected_features))).index.tolist()
-        
-        # Correlation-based selection
-        correlations = {}
-        for col in selected_features:
-            try:
-                corr, _ = pearsonr(X[col], y)
-                correlations[col] = abs(corr)
-            except:
-                correlations[col] = 0
-        corr_features = sorted(correlations, key=correlations.get, reverse=True)[:min(top_n, len(selected_features))]
-        
-        combined_features = list(set(top_features + corr_features))[:top_n]
-        return combined_features
-    except Exception as e:
-        print(f"LightGBM feature selection failed: {e}. Using correlation-based selection.")
-        return sorted(correlations, key=correlations.get, reverse=True)[:top_n]
-
-def adversarial_validation(train_data, test_data, features, threshold=0.7):
-    adv_train = train_data[features].copy().astype('float32').fillna(0)
-    adv_test = test_data[features].copy().astype('float32').fillna(0)
-    adv_train['is_test'] = 0
-    adv_test['is_test'] = 1
-    adv_data = pd.concat([adv_train, adv_test], axis=0)
-    X_adv = adv_data[features]
-    y_adv = adv_data['is_test']
-    
-    clf = lgb.LGBMClassifier(n_estimators=100, random_state=42, verbose=-1)
-    clf.fit(X_adv, y_adv)
-    importance = pd.Series(clf.feature_importances_, index=features)
-    stable_features = importance[importance < importance.quantile(threshold)].index.tolist()
-    print(f"Adversarial validation: Keeping {len(stable_features)} stable features.")
-    del adv_train, adv_test, adv_data, X_adv, y_adv, clf
-    gc.collect()
-    return stable_features
-
-# --- Step 3: Weighted Pearson Correlation ---
-def weighted_pearson_correlation(y_true, y_pred, weights=None):
-    try:
-        if weights is None:
-            weights = np.ones(len(y_true))
-        y_true = np.nan_to_num(y_true, nan=0, posinf=0, neginf=0)
-        y_pred = np.nan_to_num(y_pred, nan=0, posinf=0, neginf=0)
-        weighted_mean_true = np.average(y_true, weights=weights)
-        weighted_mean_pred = np.average(y_pred, weights=weights)
-        numerator = np.sum(weights * (y_true - weighted_mean_true) * (y_pred - weighted_mean_pred))
-        denominator = np.sqrt(np.sum(weights * (y_true - weighted_mean_true)**2) * np.sum(weights * (y_pred - weighted_mean_pred)**2))
-        return numerator / denominator if denominator != 0 else 0
-    except Exception as e:
-        print(f"Correlation calculation failed: {e}")
-        return 0
-
-# --- Step 4: Custom MLP with Improved Stability ---
-class CustomMLP(nn.Module):
-    def __init__(self, input_size):
-        super(CustomMLP, self).__init__()
-        self.layers = nn.Sequential(
-            nn.Linear(input_size, 128),
-            nn.BatchNorm1d(128),
-            nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(128, 64),
-            nn.BatchNorm1d(64),
-            nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(64, 32),
-            nn.ReLU(),
-            nn.Linear(32, 1)
-        )
-    
-    def forward(self, x):
-        return self.layers(x)
-
-def correlation_loss(y_true, y_pred):
-    y_true = torch.nan_to_num(y_true, nan=0.0, posinf=0.0, neginf=0.0)
-    y_pred = torch.nan_to_num(y_pred, nan=0.0, posinf=0.0, neginf=0.0)
-    y_true_mean = torch.mean(y_true)
-    y_pred_mean = torch.mean(y_pred)
-    y_true_centered = y_true - y_true_mean
-    y_pred_centered = y_pred - y_pred_mean
-    cov = torch.mean(y_true_centered * y_pred_centered)
-    std_true = torch.sqrt(torch.mean(y_true_centered ** 2) + 1e-6)
-    std_pred = torch.sqrt(torch.mean(y_pred_centered ** 2) + 1e-6)
-    corr = cov / (std_true * std_pred)
-    return -corr
-
-def train_mlp(X_train, y_train, X_val, y_val, input_size, batch_size=1024, epochs=50, lambda_corr=0.2):
-    model = CustomMLP(input_size).float()
-    optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-5)
-    mse_loss = nn.MSELoss()
-    
-    X_train_tensor = torch.FloatTensor(X_train.values).float()
-    y_train_tensor = torch.FloatTensor(y_train.values).reshape(-1, 1).float()
-    dataset = torch.utils.data.TensorDataset(X_train_tensor, y_train_tensor)
-    loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
-    
-    for epoch in range(epochs):
-        model.train()
-        for X_batch, y_batch in loader:
-            optimizer.zero_grad()
-            y_pred = model(X_batch)
-            mse = mse_loss(y_pred, y_batch)
-            corr_loss = correlation_loss(y_batch, y_pred)
-            loss = mse + lambda_corr * corr_loss
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-            optimizer.step()
-        gc.collect()
-    
-    model.eval()
-    with torch.no_grad():
-        y_pred_val = model(torch.FloatTensor(X_val.values).float()).numpy().flatten()
-    del dataset, loader, X_train_tensor, y_train_tensor
-    gc.collect()
-    return model, y_pred_val
-
-# --- Step 5: Fallback GBDT Model ---
+# --- Helper Functions ---
 def train_fallback_gbdt(X, y, X_test, n_folds=5):
     lgb_params = {
         'objective': 'regression', 'metric': 'mse', 'num_leaves': 64, 'learning_rate': 0.02,
@@ -199,14 +36,97 @@ def train_fallback_gbdt(X, y, X_test, n_folds=5):
         test_preds += model.predict(X_test) / n_folds
         gc.collect()
     
-    print(f"Fallback GBDT Mean Weighted Pearson Correlation: {np.mean(scores):.6f}")
     return models, test_preds
 
-# --- Step 6: Train and Evaluate Models ---
+def weighted_pearson_correlation(y_true, y_pred, weights=None):
+    if weights is None:
+        weights = np.ones(len(y_true))
+    y_true = np.nan_to_num(y_true, nan=0, posinf=0, neginf=0)
+    y_pred = np.nan_to_num(y_pred, nan=0, posinf=0, neginf=0)
+    weighted_mean_true = np.average(y_true, weights=weights)
+    weighted_mean_pred = np.average(y_pred, weights=weights)
+    numerator = np.sum(weights * (y_true - weighted_mean_true) * (y_pred - weighted_mean_pred))
+    denominator = np.sqrt(np.sum(weights * (y_true - weighted_mean_true)**2) * np.sum(weights * (y_pred - weighted_mean_pred)**2))
+    return numerator / denominator if denominator != 0 else 0
+
+# --- Step 1: Load Processed Data and Models ---
+train_path = '/kaggle/working/train_processed.parquet'
+test_path = '/kaggle/working/test_processed.parquet'
+pca_path = '/kaggle/working/pca.pkl'
+scaler_path = '/kaggle/working/scaler.pkl'
+submission_path = '/kaggle/working/submission.csv'
+
+for path in [train_path, test_path, pca_path, scaler_path]:
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"File not found at {path}.")
+
+train_data = pd.read_parquet(train_path).astype('float32')
+test_data = pd.read_parquet(test_path).astype('float32')
+with open(pca_path, 'rb') as f:
+    pca_model = pickle.load(f)
+with open(scaler_path, 'rb') as f:
+    scaler = pickle.load(f)
+
+# Define feature set based on your preprocessing
+features = [
+    'log_volume', 'volume_sq', 'volume_cube', 'volume_sin', 'volume_exp', 'volume_roll_mean', 'volume_roll_std',
+    'log_buy_qty', 'buy_qty_sq', 'buy_qty_cube', 'buy_qty_sin', 'buy_qty_exp', 'buy_qty_roll_mean', 'buy_qty_roll_std',
+    'log_sell_qty', 'sell_qty_sq', 'sell_qty_cube', 'sell_qty_sin', 'sell_qty_exp', 'sell_qty_roll_mean', 'sell_qty_roll_std',
+    'buy_sell_ratio', 'net_flow', 'order_imbalance', 'volume_imbalance', 'X680_lag_1', 'X680_lag_2', 'X680_lag_3'
+] + [f'pca_{i}' for i in range(20)]
+
+# --- Step 2: Feature Selection with Variance Threshold and Adversarial Validation ---
+def select_top_features(X, y, top_n=50):
+    selector = VarianceThreshold(threshold=1e-5)
+    X_selected = selector.fit_transform(X)
+    selected_features = X.columns[selector.get_support()].tolist()
+    
+    try:
+        train_data_lgb = lgb.Dataset(X_selected, label=y)
+        params = {
+            'objective': 'regression', 'metric': 'mse', 'num_leaves': 31, 'learning_rate': 0.05,
+            'feature_fraction': 0.8, 'bagging_fraction': 0.8, 'bagging_freq': 5, 'verbose': -1
+        }
+        model = lgb.train(params, train_data_lgb, num_boost_round=100)
+        importance = pd.Series(model.feature_importance(importance_type='gain'), index=selected_features)
+        top_features = importance.nlargest(min(top_n, len(selected_features))).index.tolist()
+        
+        correlations = {}
+        for col in selected_features:
+            try:
+                corr, _ = pearsonr(X[col], y)
+                correlations[col] = abs(corr)
+            except:
+                correlations[col] = 0
+        corr_features = sorted(correlations, key=correlations.get, reverse=True)[:min(top_n, len(selected_features))]
+        
+        combined_features = list(set(top_features + corr_features))[:top_n]
+        return combined_features
+    except:
+        return sorted(correlations, key=correlations.get, reverse=True)[:top_n]
+
+def adversarial_validation(train_data, test_data, features, threshold=0.7):
+    X = train_data[features].copy().astype('float32').fillna(0)
+    y = train_data['label'].fillna(0).astype('float32')
+    
+    selector = VarianceThreshold(threshold=1e-5)
+    X_selected = selector.fit_transform(X)
+    stable_features = [features[i] for i in selector.get_support(indices=True)]
+    
+    correlations = {}
+    for col in stable_features:
+        try:
+            corr, _ = pearsonr(X[col], y)
+            correlations[col] = abs(corr)
+        except:
+            correlations[col] = 0
+    
+    stable_features = [f for f in stable_features if correlations[f] > 0.01 or 'pca' in f]
+    return stable_features
+
 available_features = [f for f in features if f in train_data.columns]
-if available_features:
-    stable_features = adversarial_validation(train_data, test_data, available_features, threshold=0.7)
-    features = [f for f in available_features if f in stable_features] + [f'pca_{i}' for i in range(20) if f'pca_{i}' in train_data.columns]
+stable_features = adversarial_validation(train_data, None, available_features, threshold=0.7)
+features = [f for f in available_features if f in stable_features] + [f'pca_{i}' for i in range(20) if f'pca_{i}' in train_data.columns]
 
 X = train_data[features].fillna(0).astype('float32')
 y = train_data['label'].fillna(0).astype('float32')
@@ -214,112 +134,77 @@ selected_features = select_top_features(X, y, top_n=50)
 del X
 gc.collect()
 
-# Prepare data
 X_selected = train_data[selected_features].fillna(0).astype('float32')
 X_test = test_data[selected_features].fillna(0).astype('float32')
 
-# Fallback GBDT with known features
-known_features = ['log_volume', 'volume_sq', 'volume_cube', 'volume_sin', 'volume_exp', 'volume_roll_mean', 'volume_roll_std',
-                  'log_buy_qty', 'buy_qty_sq', 'buy_qty_cube', 'buy_qty_sin', 'buy_qty_exp', 'buy_qty_roll_mean', 'buy_qty_roll_std',
-                  'log_sell_qty', 'sell_qty_sq', 'sell_qty_cube', 'sell_qty_sin', 'sell_qty_exp', 'sell_qty_roll_mean', 'sell_qty_roll_std',
-                  'buy_sell_ratio', 'net_flow', 'order_imbalance', 'volume_imbalance']
+known_features = [
+    'log_volume', 'volume_sq', 'volume_cube', 'volume_sin', 'volume_exp', 'volume_roll_mean', 'volume_roll_std',
+    'log_buy_qty', 'buy_qty_sq', 'buy_qty_cube', 'buy_qty_sin', 'buy_qty_exp', 'buy_qty_roll_mean', 'buy_qty_roll_std',
+    'log_sell_qty', 'sell_qty_sq', 'sell_qty_cube', 'sell_qty_sin', 'sell_qty_exp', 'sell_qty_roll_mean', 'sell_qty_roll_std',
+    'buy_sell_ratio', 'net_flow', 'order_imbalance', 'volume_imbalance'
+]
 known_features = [f for f in known_features if f in train_data.columns]
 fallback_models, fallback_preds = train_fallback_gbdt(train_data[known_features], y, test_data[known_features])
 
-# Hyperparameters for LightGBM
+# --- Step 3: Train and Evaluate Models ---
 lgb_params = {
     'objective': 'regression', 'metric': 'mse', 'num_leaves': 128, 'learning_rate': 0.02,
     'max_depth': 12, 'feature_fraction': 0.7, 'bagging_fraction': 0.7, 'bagging_freq': 5,
     'min_data_in_leaf': 50, 'lambda_l1': 0.5, 'lambda_l2': 0.5, 'verbose': -1
 }
 
-# Cross-validation
 n_folds = 5
 kf = KFold(n_splits=n_folds, shuffle=True, random_state=42)
-lgb_scores, mlp_scores, ridge_scores, ensemble_scores = [], [], [], []
-lgb_models, mlp_models, ridge_models = [], [], []
+lgb_scores, ridge_scores, ensemble_scores = [], [], []
+lgb_models, ridge_models = [], []
 
-for fold, (train_idx, val_idx) in enumerate(kf.split(X_selected)):
+for train_idx, val_idx in kf.split(X_selected):
     X_train, X_val = X_selected.iloc[train_idx], X_selected.iloc[val_idx]
     y_train, y_val = y.iloc[train_idx], y.iloc[val_idx]
     
-    # Train LightGBM
-    try:
-        train_data_lgb = lgb.Dataset(X_train, label=y_train)
-        val_data_lgb = lgb.Dataset(X_val, label=y_val, reference=train_data_lgb)
-        lgb_model = lgb.train(lgb_params, train_data_lgb, num_boost_round=3000, valid_sets=[val_data_lgb], 
-                             callbacks=[lgb.early_stopping(stopping_rounds=200, verbose=False)])
-        y_pred_lgb = lgb_model.predict(X_val)
-        y_pred_lgb -= y_pred_lgb.mean()
-        lgb_score = weighted_pearson_correlation(y_val, y_pred_lgb)
-        lgb_scores.append(lgb_score)
-        lgb_models.append(lgb_model)
-        print(f"Fold {fold + 1} LightGBM Weighted Pearson Correlation: {lgb_score:.6f}")
-        gc.collect()
-    except Exception as e:
-        print(f"Fold {fold + 1} LightGBM failed: {e}")
-        lgb_scores.append(0)
+    train_data_lgb = lgb.Dataset(X_train, label=y_train)
+    val_data_lgb = lgb.Dataset(X_val, label=y_val, reference=train_data_lgb)
+    lgb_model = lgb.train(lgb_params, train_data_lgb, num_boost_round=3000, valid_sets=[val_data_lgb], 
+                         callbacks=[lgb.early_stopping(stopping_rounds=200, verbose=False)])
+    y_pred_lgb = lgb_model.predict(X_val)
+    y_pred_lgb -= y_pred_lgb.mean()
+    lgb_score = weighted_pearson_correlation(y_val, y_pred_lgb)
+    lgb_scores.append(lgb_score)
+    lgb_models.append(lgb_model)
+    gc.collect()
     
-    # Train MLP
-    try:
-        mlp_model, y_pred_mlp = train_mlp(X_train, y_train, X_val, y_val, len(selected_features))
-        y_pred_mlp -= y_pred_mlp.mean()
-        mlp_score = weighted_pearson_correlation(y_val, y_pred_mlp)
-        mlp_scores.append(mlp_score)
-        mlp_models.append(mlp_model)
-        print(f"Fold {fold + 1} MLP Weighted Pearson Correlation: {mlp_score:.6f}")
-        gc.collect()
-    except Exception as e:
-        print(f"Fold {fold + 1} MLP failed: {e}")
-        mlp_scores.append(0)
+    ridge = Ridge(alpha=10.0, random_state=42)
+    ridge.fit(X_train, y_train)
+    y_pred_ridge = ridge.predict(X_val)
+    y_pred_ridge -= y_pred_ridge.mean()
+    ridge_score = weighted_pearson_correlation(y_val, y_pred_ridge)
+    ridge_scores.append(ridge_score)
+    ridge_models.append(ridge)
+    gc.collect()
     
-    # Train Ridge
-    try:
-        ridge = Ridge(alpha=10.0, random_state=42)
-        ridge.fit(X_train, y_train)
-        y_pred_ridge = ridge.predict(X_val)
-        y_pred_ridge -= y_pred_ridge.mean()
-        ridge_score = weighted_pearson_correlation(y_val, y_pred_ridge)
-        ridge_scores.append(ridge_score)
-        ridge_models.append(ridge)
-        print(f"Fold {fold + 1} Ridge Weighted Pearson Correlation: {ridge_score:.6f}")
-        gc.collect()
-    except Exception as e:
-        print(f"Fold {fold + 1} Ridge failed: {e}")
-        ridge_scores.append(0)
-    
-    # Ensemble
-    if lgb_scores[fold] > 0 and mlp_scores[fold] > 0 and ridge_scores[fold] > 0:
-        y_pred_ensemble = (0.5 * y_pred_lgb + 0.3 * y_pred_mlp + 0.2 * y_pred_ridge)
+    if lgb_scores[-1] > 0 and ridge_scores[-1] > 0:
+        y_pred_ensemble = (0.7 * y_pred_lgb + 0.3 * y_pred_ridge)
         y_pred_ensemble -= y_pred_ensemble.mean()
         ensemble_score = weighted_pearson_correlation(y_val, y_pred_ensemble)
         ensemble_scores.append(ensemble_score)
-        print(f"Fold {fold + 1} Ensemble Weighted Pearson Correlation: {ensemble_score:.6f}")
     else:
         ensemble_scores.append(0)
     
     del X_train, X_val, y_train, y_val
     gc.collect()
 
-# Print mean scores
 mean_lgb_score = np.mean(lgb_scores)
-mean_mlp_score = np.mean([s for s in mlp_scores if s > 0]) if any(s > 0 for s in mlp_scores) else 0
 mean_ridge_score = np.mean(ridge_scores)
 mean_ensemble_score = np.mean([s for s in ensemble_scores if s > 0]) if any(s > 0 for s in ensemble_scores) else 0
 
-print(f"Mean Scores - LightGBM: {mean_lgb_score:.6f}, MLP: {mean_mlp_score:.6f}, Ridge: {mean_ridge_score:.6f}, Ensemble: {mean_ensemble_score:.6f}")
-
-# --- Step 7: Meta-Ridge Ensembling ---
-meta_X = np.zeros((len(X_selected), len(lgb_models) + len(mlp_models) + len(ridge_models)))
-meta_X_test = np.zeros((len(X_test), len(lgb_models) + len(mlp_models) + len(ridge_models)))
+# --- Step 4: Meta-Ridge Ensembling ---
+meta_X = np.zeros((len(X_selected), len(lgb_models) + len(ridge_models)))
+meta_X_test = np.zeros((len(X_test), len(lgb_models) + len(ridge_models)))
 
 for i, model in enumerate(lgb_models):
     meta_X[:, i] = model.predict(X_selected)
     meta_X_test[:, i] = model.predict(X_test)
-for i, model in enumerate(mlp_models, len(lgb_models)):
-    meta_X[:, i] = model(torch.FloatTensor(X_selected.values).float()).detach().numpy().flatten()
-    meta_X_test[:, i] = model(torch.FloatTensor(X_test.values).float()).detach().numpy().flatten()
-for i, model in enumerate(ridge_models, len(lgb_models) + len(mlp_models)):
+for i, model in enumerate(ridge_models, len(lgb_models)):
     meta_X[:, i] = model.predict(X_selected)
     meta_X_test[:, i] = model.predict(X_test)
 
@@ -332,15 +217,11 @@ ensemble_preds -= ensemble_preds.mean()
 final_preds = 0.7 * ensemble_preds + 0.3 * fallback_preds
 final_preds -= final_preds.mean()
 
-# --- Step 8: Generate Submission ---
-try:
-    row_id = test_data['row_id'] if 'row_id' in test_data.columns else test_data.index
-    submission = pd.DataFrame({'row_id': row_id, 'label': final_preds})
-    submission.to_csv(submission_path, index=False)
-    print(f"Submission saved to {submission_path}")
-except Exception as e:
-    raise Exception(f"Failed to create submission: {e}")
+# --- Step 5: Generate Submission ---
+row_id = test_data.index  # Using index as row_id since your preprocessing script uses index
+submission = pd.DataFrame({'row_id': row_id, 'label': final_preds})
+submission.to_csv(submission_path, index=False)
 
 # Clear memory
-del train_data, test_data, X_selected, X_test, y, lgb_models, mlp_models, ridge_models, meta_X, meta_X_test
+del train_data, test_data, X_selected, X_test, y, lgb_models, ridge_models, meta_X, meta_X_test
 gc.collect()
