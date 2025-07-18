@@ -13,6 +13,7 @@ from tqdm import tqdm
 import lightgbm as lgb
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import train_test_split
+from sklearn.feature_selection import mutual_info_regression
 import shap
 
 
@@ -264,6 +265,34 @@ def get_adversarial_validation_df(df_train='default', df_test='default', feature
         df_compute_fn=compute_adversarial_validation_df,
         filename="df_adversarial_validation.parquet",
         commit_msg="Add adversarial validation dataframe",
+        github_token=github_token,
+        refresh_repo_file=refresh_repo_file
+    )
+
+def get_mutual_information_train_df(df='default', feature_list='default', target='target',
+                                     github_token='default', refresh_repo_file=False):
+    """
+    Computes and pushes mutual information dataframe for training data.
+    """
+    def compute_mutual_information_train_df():
+        X = df[feature_list]
+        y = df[target]
+        mi_scores = []
+
+        for feature in tqdm(feature_list, desc="Calculating Mutual Information"):
+            try:
+                mi = mutual_info_regression(X[[feature]], y, discrete_features='auto')[0]
+            except Exception:
+                mi = 0.0
+            mi_scores.append((feature, mi))
+
+        return pd.DataFrame(mi_scores, columns=['feature', 'mutual_information']).sort_values(by='mutual_information', ascending=False).reset_index(drop=True)
+
+
+    return maybe_refresh_and_push(
+        df_compute_fn=compute_mutual_information_train_df,
+        filename="df_mutual_information_train.parquet",
+        commit_msg="Add mutual information dataframe",
         github_token=github_token,
         refresh_repo_file=refresh_repo_file
     )
