@@ -296,3 +296,114 @@ def get_mutual_information_train_df(df='default', feature_list='default', target
         github_token=github_token,
         refresh_repo_file=refresh_repo_file
     )
+
+
+def get_vif_train_df(df='default', thresh=100.0, min_features=200,
+                                     github_token='default', refresh_repo_file=False):
+    """
+    Computes and pushes mutual information dataframe for training data.
+    """
+    def fast_vif(df):
+        """Compute VIF using inverse correlation matrix."""
+        corr = df.corr()
+        inv_corr = np.linalg.inv(corr.values)
+        vif_vals = pd.Series(np.diag(inv_corr), index=corr.columns)
+        return vif_vals
+
+    def compute_vif_train_df():
+        """
+        Computes and pushes VIF dataframe for training data.
+        """
+        df = df.copy()
+        features = df.columns.tolist()
+        tracking = {f: {"feature_drop": False, "drop_iter": None, "drop_vif": None} for f in features}
+        
+        iter_count = 0
+        pbar = tqdm(desc="Iterative VIF drop", unit="iter")
+        
+        while True:
+            vif_series = fast_vif(df[features])
+            high_vif = vif_series[vif_series > thresh]
+
+            if high_vif.empty or len(features) <= min_features:
+                break
+
+            worst = high_vif.idxmax()
+            tracking[worst]["feature_drop"] = True
+            tracking[worst]["drop_iter"] = iter_count
+            tracking[worst]["drop_vif"] = vif_series[worst]
+            features.remove(worst)
+
+            iter_count += 1
+            pbar.update(1)
+
+        pbar.close()
+
+        result_df = pd.DataFrame.from_dict(tracking, orient="index")
+        result_df.index.name = "feature"
+        result_df.reset_index(inplace=True)
+
+        return result_df
+
+    return maybe_refresh_and_push(
+        df_compute_fn=compute_vif_train_df,
+        filename="df_vif.parquet",
+        commit_msg="Add VIF dataframe",
+        github_token=github_token,
+        refresh_repo_file=refresh_repo_file
+    )
+
+def get_vif_train_df(df='default', thresh=100.0, min_features=200,
+                     github_token='default', refresh_repo_file=False):
+    """
+    Computes and pushes mutual information dataframe for training data.
+    """
+    def fast_vif(df):
+        """Compute VIF using inverse correlation matrix."""
+        corr = df.corr()
+        inv_corr = np.linalg.inv(corr.values)
+        vif_vals = pd.Series(np.diag(inv_corr), index=corr.columns)
+        return vif_vals
+
+    def compute_vif_train_df():
+        """
+        Computes and pushes VIF dataframe for training data.
+        """
+        df = df.copy()
+        features = df.columns.tolist()
+        tracking = {f: {"feature_drop": False, "drop_iter": None, "drop_vif": None} for f in features}
+        
+        iter_count = 0
+        pbar = tqdm(desc="Iterative VIF drop", unit="iter")
+        
+        while True:
+            vif_series = fast_vif(df[features])
+            high_vif = vif_series[vif_series > thresh]
+
+            if high_vif.empty or len(features) <= min_features:
+                break
+
+            worst = high_vif.idxmax()
+            tracking[worst]["feature_drop"] = True
+            tracking[worst]["drop_iter"] = iter_count
+            tracking[worst]["drop_vif"] = vif_series[worst]
+            features.remove(worst)
+
+            iter_count += 1
+            pbar.update(1)
+
+        pbar.close()
+
+        result_df = pd.DataFrame.from_dict(tracking, orient="index")
+        result_df.index.name = "feature"
+        result_df.reset_index(inplace=True)
+
+        return result_df
+
+    return maybe_refresh_and_push(
+        df_compute_fn=compute_vif_train_df,
+        filename="df_vif.parquet",
+        commit_msg="Add VIF dataframe",
+        github_token=github_token,
+        refresh_repo_file=refresh_repo_file
+    )
