@@ -7,6 +7,7 @@ import sys
 from datetime import datetime
 
 import pandas as pd
+import numpy as np
 from scipy.stats import ks_2samp
 from statsmodels.tsa.stattools import acf
 from tqdm import tqdm
@@ -404,6 +405,54 @@ def get_vif_train_df(df='default', thresh=100.0, min_features=200,
         df_compute_fn=compute_vif_train_df,
         filename="df_vif.parquet",
         commit_msg="Add VIF dataframe",
+        github_token=github_token,
+        refresh_repo_file=refresh_repo_file
+    )
+
+
+def get_correlation_stability_df(df='default', target='label',window_size=7000,
+                                 step_size=1000,method='pearson',
+                                 github_token='default', refresh_repo_file=False):
+    """
+    Compute correlation stability of features with target using a rolling window.
+    """
+    def compute_correlation_stability_df():
+        features = df.columns.difference([target])
+        results = {f: [] for f in features}
+
+        for start in range(0, len(df) - window_size + 1, step_size):
+            window = df.iloc[start:start + window_size]
+            for f in features:
+                try:
+                    corr = window[f].corr(window[target], method=method)
+                except Exception:
+                    corr = np.nan
+                results[f].append(corr)
+
+        summary = []
+        for f, series in results.items():
+            arr = np.array(series)
+            abs_arr = np.abs(arr)
+            mean_corr = np.nanmean(abs_arr)
+            std_corr = np.nanstd(abs_arr)
+            cv = std_corr / (mean_corr + 1e-6)
+            summary.append({
+                'feature': f,
+                'mean_corr': mean_corr,
+                'std_corr': std_corr,
+                'cv': cv,
+                'min_corr': np.nanmin(abs_arr),
+                'max_corr': np.nanmax(abs_arr)
+            })
+
+        df_summary = pd.DataFrame(summary).sort_values(by='cv')
+
+        return df_summary
+
+    return maybe_refresh_and_push(
+        df_compute_fn=compute_correlation_stability_df,
+        filename="df_corr_stability.parquet",
+        commit_msg="Add correlation stability dataframe",
         github_token=github_token,
         refresh_repo_file=refresh_repo_file
     )
