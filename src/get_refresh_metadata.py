@@ -14,6 +14,10 @@ import lightgbm as lgb
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import train_test_split
 from sklearn.feature_selection import mutual_info_regression
+from statsmodels.tsa.stattools import adfuller
+from statsmodels.tsa.api import VAR
+from statsmodels.tools.sm_exceptions import ValueWarning
+import warnings
 import shap
 
 
@@ -404,6 +408,172 @@ def get_vif_train_df(df='default', thresh=100.0, min_features=200,
         df_compute_fn=compute_vif_train_df,
         filename="df_vif.parquet",
         commit_msg="Add VIF dataframe",
+        github_token=github_token,
+        refresh_repo_file=refresh_repo_file
+    )
+
+def get_monthly_multivariate_granger(df = 'default', features = 'default', maxlags = 1, alpha = 0.05,
+                                     github_token='default', refresh_repo_file=False):
+    """
+    Computes and pushes mutual information dataframe for training data.
+    """
+
+    def compute_adf_test(df, features):
+        results = {}
+        
+        for column in tqdm(features, desc="Calculate ADF for each time series"):
+            series = df[column].dropna()
+            if not pd.api.types.is_numeric_dtype(series):
+                continue
+        
+            try:
+                adf_result = adfuller(series.iloc[:20000])
+                results[column] = {
+                    'adf_statistic': adf_result[0],
+                    'p_value': adf_result[1],
+                    'lags_used': adf_result[2],
+                    'n_obs': adf_result[3],
+                    'critical_values': adf_result[4]
+                }
+            except Exception as e:
+                results[column] = f"Error: {e}"
+        
+        df_adf = pd.DataFrame(results).T
+        df_adf = pd.concat([df_adf.drop(columns='critical_values'), 
+                            df_adf['critical_values'].apply(pd.Series)], axis=1)
+        df_adf['result'] = df_adf['adf_statistic'] - df_adf['1%']
+
+        return df_adf
+
+    def convert_stationary_df(df, features):
+
+        while True:
+            df_adf = compute_adf_test(df = df, features = features)
+            non_stat_features = df_adf[df_adf['result'] > 0 ].index.tolist()
+
+            if len(non_stat_features) == 0:
+                break
+                
+            for feature in non_stat_features:
+                df[feature] = df[feature].diff()
+            
+            df = df.dropna()
+
+        return df
+
+
+    def compute_monthly_multivariate_granger():
+
+        warnings.simplefilter("ignore", ValueWarning)
+        target = 'label'
+        df_stationary = convert_stationary_df(df = df, features = features)
+        
+        time_points = df_stationary.resample('ME').mean().index
+        selection_df = pd.DataFrame(index=features)
+        
+        for end_time in time_points:
+            start_time = end_time - pd.Timedelta(days=30)
+            window_df = df_stationary.loc[start_time:end_time][features + [target]]
+            model = VAR(window_df)
+            results = model.fit(maxlags=maxlags)
+            selected = []
+            for feature in tqdm(features, desc=f"Multivariate Granger for {end_time}"):
+                test = results.test_causality(caused=target, causing=feature, kind='f')
+                selected.append(test.pvalue < alpha)
+            selection_df[end_time] = selected
+
+        selection_df['feature'] = selection_df.index
+        selection_df
+
+        return selection_df
+
+    return maybe_refresh_and_push(
+        df_compute_fn=compute_monthly_multivariate_granger,
+        filename="df_monthly_multivariate_granger.parquet",
+        commit_msg="Add monthly multivariate granger dataframe",
+        github_token=github_token,
+        refresh_repo_file=refresh_repo_file
+    )
+
+def get_monthly_multivariate_granger(df = 'default', features = 'default', maxlags = 1, alpha = 0.05,
+                                     github_token='default', refresh_repo_file=False):
+    """
+    Computes and pushes monthly multivariate granger dataframe for training data.
+    """
+
+    def compute_adf_test(df, features):
+        results = {}
+        
+        for column in tqdm(features, desc="Calculate ADF for each time series"):
+            series = df[column].dropna()
+            if not pd.api.types.is_numeric_dtype(series):
+                continue
+        
+            try:
+                adf_result = adfuller(series.iloc[:20000])
+                results[column] = {
+                    'adf_statistic': adf_result[0],
+                    'p_value': adf_result[1],
+                    'lags_used': adf_result[2],
+                    'n_obs': adf_result[3],
+                    'critical_values': adf_result[4]
+                }
+            except Exception as e:
+                results[column] = f"Error: {e}"
+        
+        df_adf = pd.DataFrame(results).T
+        df_adf = pd.concat([df_adf.drop(columns='critical_values'), 
+                            df_adf['critical_values'].apply(pd.Series)], axis=1)
+        df_adf['result'] = df_adf['adf_statistic'] - df_adf['1%']
+
+        return df_adf
+
+    def convert_stationary_df(df, features):
+
+        while True:
+            df_adf = compute_adf_test(df = df, features = features)
+            non_stat_features = df_adf[df_adf['result'] > 0 ].index.tolist()
+
+            if len(non_stat_features) == 0:
+                break
+                
+            for feature in non_stat_features:
+                df[feature] = df[feature].diff()
+            
+            df = df.dropna()
+
+        return df
+
+
+    def compute_monthly_multivariate_granger():
+
+        warnings.simplefilter("ignore", ValueWarning)
+        target = 'label'
+        df_stationary = convert_stationary_df(df = df, features = features)
+        
+        time_points = df_stationary.resample('ME').mean().index
+        selection_df = pd.DataFrame(index=features)
+        
+        for end_time in time_points:
+            start_time = end_time - pd.Timedelta(days=30)
+            window_df = df_stationary.loc[start_time:end_time][features + [target]]
+            model = VAR(window_df)
+            results = model.fit(maxlags=maxlags)
+            selected = []
+            for feature in tqdm(features, desc=f"Multivariate Granger for {end_time}"):
+                test = results.test_causality(caused=target, causing=feature, kind='f')
+                selected.append(test.pvalue < alpha)
+            selection_df[end_time] = selected
+
+        selection_df['feature'] = selection_df.index
+        selection_df
+
+        return selection_df
+
+    return maybe_refresh_and_push(
+        df_compute_fn=compute_monthly_multivariate_granger,
+        filename="df_monthly_multivariate_granger.parquet",
+        commit_msg="Add monthly multivariate granger dataframe",
         github_token=github_token,
         refresh_repo_file=refresh_repo_file
     )
