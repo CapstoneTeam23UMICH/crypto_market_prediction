@@ -2,7 +2,7 @@
 
 import subprocess
 
-def git_add_commit_push_new_branch(
+def push_folder_to_github(
     repo_path,
     folder_to_commit,
     commit_msg,
