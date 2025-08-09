@@ -3,8 +3,7 @@ import pandas as pd
 from sklearn.model_selection import TimeSeriesSplit
 
 
-def get_cv_splits(
-    df,
+def get_cv_splits(df,
     n_splits = 5,
     method= "purged",
     purge_gap_days= 7,
@@ -69,3 +68,23 @@ def get_cv_splits(
         folds.append((train_idx, val_idx))
 
     return folds
+
+cv_policy = {
+    "LGBM": {"method": "regular", "params": {"n_splits": 5}},
+    "XGB":  {"method": "regular", "params": {"n_splits": 5}},
+    "MLP":  {"method": "regular", "params": {"n_splits": 5}},
+    "classifier_SAE":  {"method": "purged", "params": {"n_splits": 5, "purge_gap_days": 7}},
+}
+
+
+def get_folds_for_model(model_key, df, **overrides):
+    """
+    Fetch folds according to the CV policy for the model key.
+    Overrides can set start/end or swap method/params ad hoc.
+    """
+    if model_key not in cv_policy:
+        raise KeyError(f"No CV policy for model '{model_key}'. Add it to cv_policy.")
+    policy = cv_policy[model_key].copy()
+    method = overrides.pop("method", policy["method"])
+    params = {**policy.get("params", {}), **overrides}
+    return get_cv_splits(df, method=method, **params)
