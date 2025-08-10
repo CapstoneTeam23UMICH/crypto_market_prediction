@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 from lightgbm import LGBMRegressor
 from xgboost import XGBRegressor
-from sklearn.neural_network import MLPRegressor
 
 
 class ClassifierSupervisedAutoencoder(nn.Module):
@@ -31,6 +30,29 @@ class ClassifierSupervisedAutoencoder(nn.Module):
         recon = self.decoder(latent)
         out = self.classifier(latent)
         return recon, out, latent
+
+class MLPRegressorTorch(nn.Module):
+    def __init__(self, input_dim, hidden_layer_sizes=(128, 256), dropout=0.0):
+        super().__init__()
+        
+        h1, h2 = hidden_layer_sizes
+
+        self.model = nn.Sequential(
+            nn.Linear(input_dim, h1),
+            nn.ReLU(),
+            nn.BatchNorm1d(h1),
+            nn.Dropout(dropout) if dropout > 0 else nn.Identity(),
+
+            nn.Linear(h1, h2),
+            nn.ReLU(),
+            nn.BatchNorm1d(h2),
+            nn.Dropout(dropout) if dropout > 0 else nn.Identity(),
+
+            nn.Linear(h2, 1)
+        )
+
+    def forward(self, x):
+        return self.model(x)
 
 def model_registry_regression(mode="find_best_model", random_state=42):
     """
@@ -80,18 +102,16 @@ def model_registry_regression(mode="find_best_model", random_state=42):
             "random_state": [random_state]
         }
         mlp_grid = {
-            "hidden_layer_sizes": [128, 256],
-            "alpha": [0.05, 0.08, 0.1],
-            "learning_rate_init": [0.001, 0.005, 0.01],
-            "activation": ["relu"],
-            "solver": ["adam"],
-            "max_iter": [200],
+            "hidden_layer_sizes": [(128, 256), (256, 128)],
+            "weight_decay": [0.05, 0.08, 0.1],
+            "lr": [0.001, 0.005, 0.01],
+            "dropout": [0.0, 0.2],
             "random_state": [random_state]
         }
         return {
             "LGBM": (LGBMRegressor, lgb_grid),
             "XGB": (XGBRegressor, xgb_grid),
-            "MLP": (MLPRegressor, mlp_grid)
+            "MLP": (MLPRegressorTorch, mlp_grid)
         }
     else:
         raise ValueError(f"Unknown mode: {mode}")
@@ -106,7 +126,9 @@ def model_registry_autoencoder(mode="find_best_model", random_state=42):
             "latent_dim": [16],
             "lr": [0.001],
             "weight_decay": [0.08],
-            "noise_std": [0.01]
+            "noise_std": [0.01],
+            "recon_alpha":[0.1],
+            "random_state": [random_state]
         }
         return {"classifier_SAE": (ClassifierSupervisedAutoencoder, classifier_sae_grid)}
 
@@ -115,7 +137,9 @@ def model_registry_autoencoder(mode="find_best_model", random_state=42):
             "latent_dim": [8, 16, 32],
             "lr": [0.001, 0.005, 0.01],
             "weight_decay": [0.05, 0.08, 0.1],
-            "noise_std": [0.01, 0.05]
+            "noise_std": [0.01, 0.05],
+            "recon_alpha":[0.1,0.5],
+            "random_state": [random_state]
         }
         return {"classifier_SAE": (ClassifierSupervisedAutoencoder, classifier_sae_grid)}
 
