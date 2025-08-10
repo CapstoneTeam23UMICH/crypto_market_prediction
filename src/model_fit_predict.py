@@ -19,6 +19,7 @@ def fit_predict_classifier_sae(
 ):
     
     ModelClass, params = model_with_param
+    params = {k: (v[0] if isinstance(v, (list, tuple)) else v) for k, v in params.items()}
     torch.manual_seed(params.get('random_state', 42))
 
     input_dim = X_train.shape[1]
@@ -73,7 +74,7 @@ def fit_predict_classifier_sae(
 
     y_train_pred = y_train_pred.detach().cpu().numpy().ravel()
     y_val_pred   = y_val_pred.detach().cpu().numpy().ravel()
-    return y_train_pred, y_val_pred
+    return y_train_pred, y_val_pred, model
 
 
 def fit_predict_mlp(
@@ -86,6 +87,7 @@ def fit_predict_mlp(
 ):
 
     ModelClass, params = model_with_param
+    params = {k: (v[0] if isinstance(v, (list, tuple)) else v) for k, v in params.items()}
     torch.manual_seed(params.get('random_state', 42))
 
     input_dim = X_train.shape[1]
@@ -128,7 +130,7 @@ def fit_predict_mlp(
         y_train_pred = model(X_train).detach().cpu().numpy().ravel()
         y_val_pred   = model(X_val).detach().cpu().numpy().ravel()
 
-    return y_train_pred, y_val_pred
+    return y_train_pred, y_val_pred, model
 
 def fit_predict_tree(
     model_with_param,
@@ -136,48 +138,24 @@ def fit_predict_tree(
     y_train,
     X_val,   
     y_val,
-    sample_weight_train=None,
-    sample_weight_val=None,
-    eval_metric = "rmse",
-    early_stopping_rounds = 200,
-    verbose = False,
+    eval_metric="rmse",
+    verbose=False
 ):
     ModelClass, params = model_with_param
+    params = {k: (v[0] if isinstance(v, (list, tuple)) else v) for k, v in params.items()}
     model = ModelClass(**params)
 
     if isinstance(model, LGBMRegressor):
-        model.fit(
-            X_train, y_train,
-            sample_weight=sample_weight_train,
-            eval_set=[(X_val, y_val)],
-            eval_sample_weight=[sample_weight_val] if sample_weight_val is not None else None,
-            eval_metric=eval_metric,
-            early_stopping_rounds=early_stopping_rounds,
-            verbose=verbose,
-        )
-        best_model = getattr(model, "best_iteration_", None)
-        y_train_pred = model.predict(X_train, num_iteration=best_model)
-        y_val_pred   = model.predict(X_val,   num_iteration=best_model)
-        return y_train_pred, y_val_pred
+        model.fit(X_train, y_train)
+        y_train_pred = model.predict(X_train)
+        y_val_pred   = model.predict(X_val)
+        return y_train_pred, y_val_pred, model
 
     elif isinstance(model, XGBRegressor):
-        model.set_params(eval_metric=eval_metric)
-        model.fit(
-            X_train, y_train,
-            sample_weight=sample_weight_train,
-            eval_set=[(X_val, y_val)],
-            sample_weight_eval_set=[sample_weight_val] if sample_weight_val is not None else None,
-            early_stopping_rounds=early_stopping_rounds,
-            verbose=verbose,
-        )
+        model.fit(X_train, y_train, verbose=verbose)
+        y_train_pred = model.predict(X_train)
+        y_val_pred   = model.predict(X_val)
+        return y_train_pred, y_val_pred, model
 
-        best_model = getattr(model, "best_ntree_limit", None)
-        if best_model is not None:
-            y_train_pred = model.predict(X_train, ntree_limit=best_model)
-            y_val_pred   = model.predict(X_val,   ntree_limit=best_model)
-        else:
-            y_train_pred = model.predict(X_train)
-            y_val_pred   = model.predict(X_val)
-        return y_train_pred, y_val_pred
     else:
         raise TypeError("Got unsupported model")
