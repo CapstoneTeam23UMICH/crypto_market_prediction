@@ -38,6 +38,7 @@ def model_registry_regression(mode="find_best_model", random_state=42):
     Modes: "find_best_model" | "best_model_single_param"
     """
     if mode == "best_model_single_param":
+    ######### Will convert to dynamic one MLflow is in place #################
         lgb_grid = {
             "num_leaves": [30],
             "max_depth": [5],
@@ -49,32 +50,8 @@ def model_registry_regression(mode="find_best_model", random_state=42):
             "objective": ["regression"],
             "random_state": [random_state]
         }
-        xgb_grid = {
-            "max_depth": [5],
-            "subsample": [0.8],
-            "colsample_bytree": [0.8],
-            "reg_alpha": [0.1],
-            "reg_lambda": [0.1],
-            "gamma": [1],
-            "learning_rate": [0.05],
-            "n_estimators": [200],
-            "objective": ["reg:squarederror"],
-            "tree_method": ["hist"],
-            "random_state": [random_state]
-        }
-        mlp_grid = {
-            "hidden_layer_sizes": [(128,)],
-            "alpha": [1e-4],
-            "learning_rate_init": [1e-3],
-            "activation": ["relu"],
-            "solver": ["adam"],
-            "max_iter": [200],
-            "random_state": [random_state]
-        }
         return {
-            "LGBM": (LGBMRegressor, lgb_grid),
-            "XGB": (XGBRegressor, xgb_grid),
-            "MLP": (MLPRegressor, mlp_grid)
+            "LGBM": (LGBMRegressor, lgb_grid)
         }
 
     elif mode == "find_best_model":
