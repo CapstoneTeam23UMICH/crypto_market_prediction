@@ -1,0 +1,22 @@
+artifact_path: /kaggle/working/crypto_market_prediction/mlruns/642647566216676873/models/m-85521f48f76a47f1a8212cc3ffbea2fe/artifacts
+flavors:
+  python_function:
+    data: model.xgb
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.xgboost
+    python_version: 3.11.13
+  xgboost:
+    code: null
+    data: model.xgb
+    model_class: xgboost.sklearn.XGBRegressor
+    model_format: xgb
+    xgb_version: 2.0.3
+mlflow_version: 3.2.0
+model_id: m-85521f48f76a47f1a8212cc3ffbea2fe
+model_size_bytes: 138756
+model_uuid: m-85521f48f76a47f1a8212cc3ffbea2fe
+prompts: null
+run_id: 3b23147eeeee45bcae5654d592138c9a
+utc_time_created: '2025-08-11 22:12:36.246606'
