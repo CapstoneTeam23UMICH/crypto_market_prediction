@@ -7,3 +7,4 @@ scipy==1.15.3
 shap==0.44.1
 torch==2.6.0+cu124
 tqdm==4.67.1
+mlflow==3.2.0
