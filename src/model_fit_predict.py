@@ -19,7 +19,7 @@ def fit_predict_classifier_sae(
 ):
     
     ModelClass, params = model_with_param
-    params = {k: (v[0] if isinstance(v, (list, tuple)) else v) for k, v in params.items()}
+    params = {k: (v[0] if isinstance(v, (list)) else v) for k, v in params.items()}
     torch.manual_seed(params.get('random_state', 42))
 
     input_dim = X_train.shape[1]
@@ -87,7 +87,7 @@ def fit_predict_mlp(
 ):
 
     ModelClass, params = model_with_param
-    params = {k: (v[0] if isinstance(v, (list, tuple)) else v) for k, v in params.items()}
+    params = {k: (v[0] if isinstance(v, (list)) else v) for k, v in params.items()}
     torch.manual_seed(params.get('random_state', 42))
 
     input_dim = X_train.shape[1]
@@ -142,7 +142,7 @@ def fit_predict_tree(
     verbose=False
 ):
     ModelClass, params = model_with_param
-    params = {k: (v[0] if isinstance(v, (list, tuple)) else v) for k, v in params.items()}
+    params = {k: (v[0] if isinstance(v, (list)) else v) for k, v in params.items()}
     model = ModelClass(**params)
 
     if isinstance(model, LGBMRegressor):
