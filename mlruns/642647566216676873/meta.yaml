@@ -1,0 +1,6 @@
+artifact_location: /kaggle/working/crypto_market_prediction/mlruns/642647566216676873
+creation_time: 1754944144679
+experiment_id: '642647566216676873'
+last_update_time: 1754944144679
+lifecycle_stage: active
+name: regression_grid_search

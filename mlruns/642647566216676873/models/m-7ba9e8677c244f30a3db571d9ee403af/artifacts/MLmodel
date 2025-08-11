@@ -1,0 +1,23 @@
+artifact_path: /kaggle/working/crypto_market_prediction/mlruns/642647566216676873/models/m-7ba9e8677c244f30a3db571d9ee403af/artifacts
+flavors:
+  python_function:
+    config:
+      device: null
+    data: data
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.pytorch
+    pickle_module_name: mlflow.pytorch.pickle_module
+    python_version: 3.11.13
+  pytorch:
+    code: null
+    model_data: data
+    pytorch_version: 2.6.0+cu124
+mlflow_version: 3.2.0
+model_id: m-7ba9e8677c244f30a3db571d9ee403af
+model_size_bytes: 267930
+model_uuid: m-7ba9e8677c244f30a3db571d9ee403af
+prompts: null
+run_id: f62e00187eab4de3b610dc6f10fa49ef
+utc_time_created: '2025-08-11 20:42:11.119028'

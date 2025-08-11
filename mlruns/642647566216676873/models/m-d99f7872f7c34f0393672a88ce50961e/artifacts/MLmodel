@@ -1,0 +1,21 @@
+artifact_path: /kaggle/working/crypto_market_prediction/mlruns/642647566216676873/models/m-d99f7872f7c34f0393672a88ce50961e/artifacts
+flavors:
+  lightgbm:
+    code: null
+    data: model.pkl
+    lgb_version: 4.5.0
+    model_class: lightgbm.sklearn.LGBMRegressor
+  python_function:
+    data: model.pkl
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.lightgbm
+    python_version: 3.11.13
+mlflow_version: 3.2.0
+model_id: m-d99f7872f7c34f0393672a88ce50961e
+model_size_bytes: 582974
+model_uuid: m-d99f7872f7c34f0393672a88ce50961e
+prompts: null
+run_id: 4f6f97eb128d44428b50a54dcdb2d4b0
+utc_time_created: '2025-08-11 21:43:11.075030'

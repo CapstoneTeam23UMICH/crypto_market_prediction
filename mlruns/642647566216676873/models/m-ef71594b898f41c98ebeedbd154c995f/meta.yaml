@@ -1,0 +1,10 @@
+artifact_location: /kaggle/working/crypto_market_prediction/mlruns/642647566216676873/models/m-ef71594b898f41c98ebeedbd154c995f/artifacts
+creation_timestamp: 1754953197070
+experiment_id: '642647566216676873'
+last_updated_timestamp: 1754953200198
+model_id: m-ef71594b898f41c98ebeedbd154c995f
+model_type: null
+name: model
+source_run_id: be129719f1bb48758579a551be79932e
+status: 2
+status_message: null

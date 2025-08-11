@@ -1,0 +1,6 @@
+destination_id: m-dfc75da9713741c78bab08482571baa5
+destination_type: MODEL_OUTPUT
+source_id: m-dfc75da9713741c78bab08482571baa5
+source_type: RUN_OUTPUT
+step: 0
+tags: {}

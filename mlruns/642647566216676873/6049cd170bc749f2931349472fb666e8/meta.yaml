@@ -1,0 +1,14 @@
+artifact_uri: /kaggle/working/crypto_market_prediction/mlruns/642647566216676873/6049cd170bc749f2931349472fb666e8/artifacts
+end_time: 1754947899562
+entry_point_name: ''
+experiment_id: '642647566216676873'
+lifecycle_stage: active
+run_id: 6049cd170bc749f2931349472fb666e8
+run_name: LGBM_grid_11
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1754947734732
+status: 3
+tags: []
+user_id: root
