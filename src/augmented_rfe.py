@@ -24,7 +24,8 @@ def augmented_rfe_timeseries_lightgbm(
             "reg_lambda": 0.5,
             "learning_rate": 0.05,
             "objective": "regression",
-            "random_state": 42
+            "random_state": 42,
+            "verbose": -1
         }
 
     X = df.drop(columns=[label_col])
