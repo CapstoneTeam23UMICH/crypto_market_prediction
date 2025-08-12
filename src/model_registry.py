@@ -60,22 +60,16 @@ def model_registry_regression(mode="find_best_model", random_state=42):
     Modes: "find_best_model" | "best_model_single_param"
     """
     if mode == "best_model_single_param":
-    ######### Will convert to dynamic one MLflow is in place #################
-        lgb_grid = {
-            "num_leaves": [30],
-            "max_depth": [5],
-            "subsample": [0.8],
-            "reg_alpha": [0.1],
-            "reg_lambda": [0.1],
-            "learning_rate": [0.05],
-            "n_estimators": [200],
-            "objective": ["regression"],
+        mlp_grid = {
+            "hidden_layer_sizes": [(128, 256)],
+            "weight_decay": [0.08],
+            "lr": [0.005],
+            "dropout": [0.2],
             "random_state": [random_state]
         }
         return {
-            "LGBM": (LGBMRegressor, lgb_grid)
+            "MLP": (MLPRegressorTorch, mlp_grid)
         }
-
     elif mode == "find_best_model":
         lgb_grid = {
             "num_leaves": [30],
@@ -102,10 +96,47 @@ def model_registry_regression(mode="find_best_model", random_state=42):
             "random_state": [random_state]
         }
         mlp_grid = {
-            "hidden_layer_sizes": [(128, 256), (256, 128)],
+            "hidden_layer_sizes": [(64, 128), (128, 256)],
             "weight_decay": [0.05, 0.08, 0.1],
             "lr": [0.001, 0.005, 0.01],
             "dropout": [0.0, 0.2],
+            "random_state": [random_state]
+        }
+        return {
+            "LGBM": (LGBMRegressor, lgb_grid),
+            "XGB": (XGBRegressor, xgb_grid),
+            "MLP": (MLPRegressorTorch, mlp_grid)
+        }
+    elif mode == "sensitivity_analysis":
+        lgb_grid = {
+            "num_leaves": [30],
+            "max_depth": [3, 5, 10, 20, 30],
+            "subsample": [0.8],
+            "reg_alpha": [0.5],
+            "reg_lambda": [0.5, 1, 3, 5, 10],
+            "learning_rate": [0.1],
+            "n_estimators": [200],
+            "objective": ["regression"],
+            "random_state": [random_state]
+        }
+        xgb_grid = {
+            "max_depth": [3, 5, 10, 20, 30],
+            "subsample": [0.8],
+            "colsample_bytree": [0.8],
+            "reg_alpha": [0.5],
+            "reg_lambda": [0.5, 1, 3, 5, 10],
+            "gamma": [0, 1],
+            "learning_rate": [0.1],
+            "n_estimators": [200],
+            "objective": ["reg:squarederror"],
+            "tree_method": ["hist"],
+            "random_state": [random_state]
+        }
+        mlp_grid = {
+            "hidden_layer_sizes": [(128, 256)],
+            "weight_decay": [0.05, 0.08, 0.1, 0.2, 0.5],
+            "lr": [0.001, 0.005, 0.01, 0.02, 0.05],
+            "dropout": [0.2],
             "random_state": [random_state]
         }
         return {

@@ -4,6 +4,7 @@ import torch
 from typing import Dict, List, Tuple, Callable, Any
 from itertools import product
 from tqdm import tqdm
+import os
 
 import json
 import mlflow
@@ -44,7 +45,6 @@ def run_cv(
 
     if model_key == "classifier_SAE":
         registry = model_registry_autoencoder(mode=mode)
-        print(registry.values())
         (ModelClass, param_grid), = registry.values()
         fit_fn: Callable = fit_predict_classifier_sae
         df = preprocess_classifier_sae(df, selected_features + ['label'])
@@ -101,7 +101,7 @@ def run_cv(
             )
 
             fold_metrics = evaluate_classification(
-                y_train=df_val.loc[:, ['target']].to_numpy(),
+                y_train=df_train.loc[:, ['target']].to_numpy(),
                 p_train=y_train_pred,
                 y_test=df_val.loc[:, ['target']].to_numpy(),
                 p_test=y_val_pred,
@@ -118,7 +118,6 @@ def run_cv(
                 X_val_t = to_tensor(X_val_df, device=device)
                 y_val_t = to_tensor(y_val_df, device=device).view(-1, 1)
                 h1, h2 = params['hidden_layer_sizes']
-                print((h1, h2))
                 y_train_pred, y_val_pred, model = fit_fn(
                     (ModelClass, params),
                     X_train_t,
@@ -177,6 +176,7 @@ def run_grid_search(
 
     mlflow.set_tracking_uri(tracking_uri)
     mlflow.set_experiment(experiment_name)
+    os.environ.setdefault("XGBOOST_MODEL_FORMAT", "json")
 
     if model_key == "classifier_SAE":
         registry = model_registry_autoencoder(mode=mode)
@@ -222,22 +222,17 @@ def run_grid_search(
                 trained_models = cv_result.get("models", [])
                 if trained_models:
                     model_obj = trained_models[-1]
+                    input_example = df[selected_features].head(10)
                     if model_key in ("classifier_SAE", "MLP"):
-                        mlflow.pytorch.log_model(model_obj, artifact_path="model")
+                        mlflow.pytorch.log_model(model_obj, name="model",
+                                          input_example= to_tensor(input_example))
                     elif model_key == "LGBM":
-                        try:
-                            mlflow.lightgbm.log_model(model_obj, artifact_path="model")  
-                        except Exception:
-                            mlflow.sklearn.log_model(model_obj, artifact_path="model")
+                        mlflow.lightgbm.log_model(model_obj, name="model",
+                                          input_example=input_example)  
                     elif model_key == "XGB":
-                        try:
-                            mlflow.xgboost.log_model(model_obj, artifact_path="model")
-                        except Exception:
-                            mlflow.sklearn.log_model(model_obj, artifact_path="model") 
-                    else:
-                        mlflow.sklearn.log_model(model_obj, artifact_path="model") 
+                        mlflow.xgboost.log_model(model_obj, name="model",
+                                          input_example=input_example)
             except Exception:
-                print('Unable to log models')
                 pass
 
             results.append((params, cv_result))
