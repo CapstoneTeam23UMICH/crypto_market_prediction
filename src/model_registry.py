@@ -165,11 +165,11 @@ def model_registry_autoencoder(mode="find_best_model", random_state=42):
 
     elif mode == "find_best_model":
         classifier_sae_grid = {
-            "latent_dim": [8, 16, 32],
-            "lr": [0.001, 0.005, 0.01],
-            "weight_decay": [0.05, 0.08, 0.1],
+            "latent_dim": [16, 32],
+            "lr": [0.005, 0.01],
+            "weight_decay": [0.05, 0.08],
             "noise_std": [0.01, 0.05],
-            "recon_alpha":[0.1,0.5],
+            "recon_alpha":[0.1, 0.5],
             "random_state": [random_state]
         }
         return {"classifier_SAE": (ClassifierSupervisedAutoencoder, classifier_sae_grid)}
