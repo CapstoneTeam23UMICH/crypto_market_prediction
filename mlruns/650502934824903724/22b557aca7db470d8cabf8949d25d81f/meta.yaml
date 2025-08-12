@@ -1,0 +1,14 @@
+artifact_uri: /kaggle/working/crypto_market_prediction/mlruns/650502934824903724/22b557aca7db470d8cabf8949d25d81f/artifacts
+end_time: 1755008724214
+entry_point_name: ''
+experiment_id: '650502934824903724'
+lifecycle_stage: active
+run_id: 22b557aca7db470d8cabf8949d25d81f
+run_name: classifier_SAE_grid_16
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1755008671702
+status: 3
+tags: []
+user_id: root

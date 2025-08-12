@@ -1,0 +1,6 @@
+artifact_location: /kaggle/working/crypto_market_prediction/mlruns/650502934824903724
+creation_time: 1755007830077
+experiment_id: '650502934824903724'
+last_update_time: 1755007830077
+lifecycle_stage: active
+name: autoencoder_grid_search
