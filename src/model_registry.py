@@ -80,7 +80,8 @@ def model_registry_regression(mode="find_best_model", random_state=42):
             "learning_rate": [0.05, 0.1],
             "n_estimators": [200],
             "objective": ["regression"],
-            "random_state": [random_state]
+            "random_state": [random_state],
+            "verbose": -1
         }
         xgb_grid = {
             "max_depth": [3, 5],
@@ -117,7 +118,8 @@ def model_registry_regression(mode="find_best_model", random_state=42):
             "learning_rate": [0.1],
             "n_estimators": [200],
             "objective": ["regression"],
-            "random_state": [random_state]
+            "random_state": [random_state],
+            "verbose": -1
         }
         xgb_grid = {
             "max_depth": [3, 5, 10, 20, 30],
