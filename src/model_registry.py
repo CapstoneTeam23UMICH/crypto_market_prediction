@@ -62,9 +62,9 @@ def model_registry_regression(mode="find_best_model", random_state=42):
     if mode == "best_model_single_param":
         mlp_grid = {
             "hidden_layer_sizes": [(128, 256)],
-            "weight_decay": [0.08],
+            "weight_decay": [0.1],
             "lr": [0.005],
-            "dropout": [0.2],
+            "dropout": [0.3],
             "random_state": [random_state]
         }
         return {
@@ -99,7 +99,7 @@ def model_registry_regression(mode="find_best_model", random_state=42):
             "hidden_layer_sizes": [(64, 128), (128, 256)],
             "weight_decay": [0.05, 0.08, 0.1],
             "lr": [0.001, 0.005, 0.01],
-            "dropout": [0.0, 0.2],
+            "dropout": [0.0, 0.2, 0.3],
             "random_state": [random_state]
         }
         return {
@@ -154,9 +154,9 @@ def model_registry_autoencoder(mode="find_best_model", random_state=42):
     """
     if mode == "best_model_single_param":
         classifier_sae_grid = {
-            "latent_dim": [16],
-            "lr": [0.001],
-            "weight_decay": [0.08],
+            "latent_dim": [64],
+            "lr": [0.005],
+            "weight_decay": [0.05],
             "noise_std": [0.01],
             "recon_alpha":[0.1],
             "random_state": [random_state]
@@ -165,7 +165,7 @@ def model_registry_autoencoder(mode="find_best_model", random_state=42):
 
     elif mode == "find_best_model":
         classifier_sae_grid = {
-            "latent_dim": [16, 32],
+            "latent_dim": [16, 32, 64],
             "lr": [0.005, 0.01],
             "weight_decay": [0.05, 0.08],
             "noise_std": [0.01, 0.05],
