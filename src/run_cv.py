@@ -176,11 +176,10 @@ def run_grid_search(
 
     mlflow.set_tracking_uri(tracking_uri)
     mlflow.set_experiment(experiment_name)
-    os.environ.setdefault("XGBOOST_MODEL_FORMAT", "json")
 
     if model_key == "classifier_SAE":
         registry = model_registry_autoencoder(mode=mode)
-        (ModelClass, param_grid), = registry.values()
+        ModelClass, param_grid = registry[model_key]
     else:
         registry = model_registry_regression(mode=mode)
         ModelClass, param_grid = registry[model_key]
