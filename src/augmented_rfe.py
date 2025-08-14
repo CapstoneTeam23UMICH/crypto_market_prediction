@@ -13,8 +13,25 @@ def augmented_rfe_timeseries_lightgbm(
     num_boost_round=100,
     min_features=50,
     fold_weights=None,
-    verbose=True
+    verbose=False
 ):
+    """
+    Perform recursive feature elimination for time series using LightGBM with fold-wise importance.
+
+    Args:
+        df (DataFrame): Input data with features and target.
+        label_col (str): Name of the target column.
+        model_params (dict, optional): LightGBM parameters.
+        n_splits (int): Number of time-series CV splits.
+        num_boost_round (int): Number of boosting iterations.
+        min_features (int): Minimum features to keep.
+        fold_weights (list, optional): Weights for each fold when evaluating improvements.
+        verbose (bool): If True, print progress and debug info.
+
+    Returns:
+        tuple: (list of selected features, DataFrame with feature elimination history)
+    """
+
     if model_params is None:
         model_params = {
             "num_leaves":30,
