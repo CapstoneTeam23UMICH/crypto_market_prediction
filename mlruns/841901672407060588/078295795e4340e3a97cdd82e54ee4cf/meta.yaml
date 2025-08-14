@@ -1,0 +1,14 @@
+artifact_uri: /kaggle/working/crypto_market_prediction/mlruns/841901672407060588/078295795e4340e3a97cdd82e54ee4cf/artifacts
+end_time: 1755169868393
+entry_point_name: ''
+experiment_id: '841901672407060588'
+lifecycle_stage: active
+run_id: 078295795e4340e3a97cdd82e54ee4cf
+run_name: MLP_grid_25
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1755169840963
+status: 3
+tags: []
+user_id: root
