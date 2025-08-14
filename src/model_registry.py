@@ -136,8 +136,8 @@ def model_registry_regression(mode="find_best_model", random_state=42):
         }
         mlp_grid = {
             "hidden_layer_sizes": [(128, 256)],
-            "weight_decay": [0.05, 0.08, 0.1, 0.2, 0.5],
-            "lr": [0.001, 0.005, 0.01, 0.02, 0.05],
+            "weight_decay": [0.001, 0.01, 0.05, 0.1, 0.2, 0.5, 0.8],
+            "lr": [0.001, 0.005, 0.01, 0.02, 0.03, 0.05, 0.1],
             "dropout": [0.2],
             "random_state": [random_state]
         }
