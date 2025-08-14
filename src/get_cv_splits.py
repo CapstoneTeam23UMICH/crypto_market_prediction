@@ -1,4 +1,6 @@
-
+"""
+Time-series cross-validation splits with optional purge gap before validation.
+"""
 import pandas as pd
 from sklearn.model_selection import TimeSeriesSplit
 
@@ -12,29 +14,19 @@ def get_cv_splits(df,
     return_positions = False
 ):
     """
-    Build time-aware CV folds with optional *purge gap* before each validation window
-    to reduce leakage.
+    Generate time-series CV splits, supporting both purged and regular methods.
 
-    Parameters -
-    df : pd.DataFrame
-        Must have a DatetimeIndex sorted in ascending order.
-    n_splits : int
-        Number of folds for TimeSeriesSplit.
-    method : {"regular", "purged"}
-        - "regular": sklearn TimeSeriesSplit.
-        - "purged": remove a time gap before each validation window from the train set.
-    purge_gap_days : int
-        Gap (in days) to purge *before* the validation start (only for method="purged").
-    start, end : str
-        If provided, slice the dataframe before building folds.
-    return_positions : bool
-        If True, return integer positions; otherwise return timestamp indexes.
+    Args:
+        df (DataFrame): Input dataframe with datetime index.
+        n_splits (int): Number of splits.
+        method (str): "purged" or "regular".
+        purge_gap_days (int): Gap in days to purge before validation (only for purged).
+        start (str or Timestamp, optional): Start date to subset data.
+        end (str or Timestamp, optional): End date to subset data.
+        return_positions (bool): If True, return integer positions; else datetime indices.
 
-    Returns -
-
-    folds : list[tuple]
-        List of (train_index, val_index) for each fold..
-
+    Returns:
+        list[tuple]: Train and validation indices for each split.
     """
     df = df.sort_index()
 
@@ -80,7 +72,7 @@ cv_policy = {
 def get_folds_for_model(model_key, df, **overrides):
     """
     Fetch folds according to the CV policy for the model key.
-    Overrides can set start/end or swap method/params ad hoc.
+    Overrides can set start/end.
     """
     if model_key not in cv_policy:
         raise KeyError(f"No CV policy for model '{model_key}'. Add it to cv_policy.")

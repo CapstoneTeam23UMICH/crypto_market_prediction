@@ -1,3 +1,7 @@
+"""
+Model training and prediction utilities for SAE, MLP, and tree-based models.
+"""
+
 import torch
 import torch.nn as nn
 from lightgbm import LGBMRegressor
@@ -17,7 +21,22 @@ def fit_predict_classifier_sae(
     w_val,
     max_epochs=100
 ):
-    
+    """
+    Train and evaluate a supervised autoencoder classifier.
+
+    Args:
+        model_with_param (tuple): (Model class, params dict).
+        X_train (Tensor): Training features.
+        y_train (Tensor): Training labels.
+        w_train (Tensor): Training sample weights.
+        X_val (Tensor): Validation features.
+        y_val (Tensor): Validation labels.
+        w_val (Tensor): Validation sample weights.
+        max_epochs (int): Number of training epochs.
+
+    Returns:
+        tuple: (train predictions, validation predictions, trained model).
+    """
     ModelClass, params = model_with_param
     params = {k: (v[0] if isinstance(v, (list)) else v) for k, v in params.items()}
     torch.manual_seed(params.get('random_state', 42))
@@ -85,7 +104,20 @@ def fit_predict_mlp(
     y_val,
     max_epochs = 100,
 ):
+    """
+    Train and evaluate a multi-layer perceptron.
 
+    Args:
+        model_with_param (tuple): (Model class, params dict).
+        X_train (Tensor): Training features.
+        y_train (Tensor): Training labels.
+        X_val (Tensor): Validation features.
+        y_val (Tensor): Validation labels.
+        max_epochs (int): Number of training epochs.
+
+    Returns:
+        tuple: (train predictions, validation predictions, trained model).
+    """
     ModelClass, params = model_with_param
     params = {k: (v[0] if isinstance(v, (list)) else v) for k, v in params.items()}
     torch.manual_seed(params.get('random_state', 42))
@@ -141,6 +173,21 @@ def fit_predict_tree(
     eval_metric="rmse",
     verbose=False
 ):
+    """
+    Train and evaluate a tree-based model (LightGBM or XGBoost).
+
+    Args:
+        model_with_param (tuple): (Model class, params dict).
+        X_train (array-like): Training features.
+        y_train (array-like): Training labels.
+        X_val (array-like): Validation features.
+        y_val (array-like): Validation labels.
+        eval_metric (str): Evaluation metric for tree models.
+        verbose (bool): Verbosity flag for training.
+
+    Returns:
+        tuple: (train predictions, validation predictions, trained model).
+    """
     ModelClass, params = model_with_param
     params = {k: (v[0] if isinstance(v, (list)) else v) for k, v in params.items()}
     model = ModelClass(**params)
