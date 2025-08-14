@@ -1,3 +1,7 @@
+"""
+Cross-validation and grid search utilities for training, evaluating, and logging models with MLflow.
+"""
+
 import pandas as pd
 import numpy as np
 import torch
@@ -41,6 +45,21 @@ def run_cv(
     mode = "find_best_model",
     params_override = None
 ):
+    """
+    Run cross-validation for a given model.
+
+    Args:
+        model_key (str): Key identifying the model in the registry.
+        df (DataFrame): Input dataset.
+        selected_features (list): Features to use for training.
+        target (str): Target column name.
+        mode (str): Model registry mode.
+        params_override (dict, optional): Override default parameters.
+
+    Returns:
+        dict: Folds, predictions, metrics, and trained models.
+    """
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     if model_key == "classifier_SAE":
@@ -173,6 +192,21 @@ def run_grid_search(
     tracking_uri = "/kaggle/working/crypto_market_prediction/mlruns",
     experiment_name = 'test_cv_run',
 ):
+    """
+    Run grid search with cross-validation and log results to MLflow.
+
+    Args:
+        model_key (str): Key identifying the model in the registry.
+        df (DataFrame): Input dataset.
+        selected_features (list): Features to use for training.
+        target (str): Target column name.
+        mode (str): Model registry mode.
+        tracking_uri (str): MLflow tracking URI.
+        experiment_name (str): MLflow experiment name.
+
+    Returns:
+        list: Tuples of (params, CV results) for each run.
+    """
 
     mlflow.set_tracking_uri(tracking_uri)
     mlflow.set_experiment(experiment_name)

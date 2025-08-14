@@ -1,3 +1,7 @@
+"""
+Model Registry which includes all models in the core part of the repo
+"""
+
 import torch
 import torch.nn as nn
 from lightgbm import LGBMRegressor
@@ -57,7 +61,7 @@ class MLPRegressorTorch(nn.Module):
 def model_registry_regression(mode="find_best_model", random_state=42):
     """
     Returns: (model_class, param_grid)
-    Modes: "find_best_model" | "best_model_single_param"
+    Modes: "find_best_model" | "best_model_single_param | "sensitivity_analysis"
     """
     if mode == "best_model_single_param":
         mlp_grid = {
@@ -152,7 +156,7 @@ def model_registry_regression(mode="find_best_model", random_state=42):
 def model_registry_autoencoder(mode="find_best_model", random_state=42):
     """
     Returns: (model_class, param_grid)
-    Modes: "find_best_model" | "best_model_single_param"
+    Modes: "find_best_model" | "best_model_single_param | "sensitivity_analysis"
     """
     if mode == "best_model_single_param":
         classifier_sae_grid = {

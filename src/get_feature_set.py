@@ -9,7 +9,16 @@ from src.get_refresh_metadata import get_vif_train_df
 
 def get_feature_set(anonymized_features, corr_thresh = 'default', vif_tresh = 'default', mi_tresh = 'default'):
     """
-    Returns selected feature set based on various threshold
+    Select features based on correlation, VIF, and mutual information thresholds.
+
+    Args:
+        anonymized_features (list): List of feature names to filter.
+        corr_thresh (float or 'default'): Drop features with correlation above this value.
+        vif_tresh (float or 'default'): Drop features with VIF above this value.
+        mi_tresh (float or 'default'): Keep features with mutual information above this value.
+
+    Returns:
+        list: Final list of selected features.
     """
                    
     df_drift = get_feature_drift_df()
